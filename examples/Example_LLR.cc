@@ -38,6 +38,9 @@ directory
  *   \f$\beta S[U] \rightarrow aS[U] + (S[U]-S_0)^2/(2\sigma^2)\f$
  * The initial \f$a\f$ and \f$S_0\f$ can be set on the command line with
  * `--a_init <value> --S0_init <value>`.
+ * The above behaviour can be turned off with `--noLLR`, in which case
+ * the unconstrained action is used. In both cases, \f$beta\f$ can also
+ * be provided in the command line with `--beta <value>`
  */
 
 int main(int argc, char **argv) 
@@ -48,24 +51,39 @@ int main(int argc, char **argv)
   GridLogLayout();
 
   // Starting values for solver parameters
+  bool doLLR = true;
+  if( GridCmdOptionExists(argv, argv+argc, "--noLLR") ) {
+    std::cout << GridLogMessage << "Example_LLR: turning off the constrained action and R-M solver. Provided arguments --a_init and --S0_init will be ignored." << std::endl;
+    doLLR = false;
+  }
   RealD alpha0 = 1;
   RealD S0  = 1000;
   RealD sigma  = 3.0;
+  RealD beta = 1;
   std::string arg;
-  if( GridCmdOptionExists(argv, argv+argc, "--a_init") ) {
-    arg = GridCmdOptionPayload(argv, argv+argc, "--a_init");
-    GridCmdOptionFloat(arg, alpha0);
+  if (doLLR) {
+    if( GridCmdOptionExists(argv, argv+argc, "--a_init") ) {
+      arg = GridCmdOptionPayload(argv, argv+argc, "--a_init");
+      GridCmdOptionFloat(arg, alpha0);
+    }
+    if( GridCmdOptionExists(argv, argv+argc, "--S0_init") ) {
+      arg = GridCmdOptionPayload(argv, argv+argc, "--S0_init");
+      GridCmdOptionFloat(arg, S0);
+    }
+    std::string gaugeGroup = "SU(3)";
+    if (Sp2n_config) {
+      gaugeGroup = "Sp(4)";
+    }
+    std::cout << GridLogMessage << "Example_LLR: Robbins-Monro solver parameters for " << gaugeGroup << ": S0 = " << S0 << ", a = " << alpha0 << ", sigma = " << sigma << std::endl;
   }
-  if( GridCmdOptionExists(argv, argv+argc, "--S0_init") ) {
-    arg = GridCmdOptionPayload(argv, argv+argc, "--S0_init");
-    GridCmdOptionFloat(arg, S0);
-  }
-  std::string gaugeGroup = "SU(3)";
-  if (Sp2n_config) {
-    gaugeGroup = "Sp(4)";
-  }
-  std::cout << GridLogMessage << "Example_LLR: Robbins-Monro solver parameters for " << gaugeGroup << ": S0 = " << S0 << ", a = " << alpha0 << ", sigma = " << sigma << std::endl;
-
+  //  else {
+    if( GridCmdOptionExists(argv, argv+argc, "--beta") ) {
+      arg = GridCmdOptionPayload(argv, argv+argc, "--beta");
+      GridCmdOptionFloat(arg, beta);
+    }
+    //}
+    std::cout << GridLogMessage << "Example_LLR: unconstrained action beta = " << beta << std::endl;
+  
   // The HMC runner
   typedef GenericHMCRunner<MinimumNorm2> HMCWrapper;  // Uses the default minimum norm
   HMCWrapper TheHMC;
@@ -105,18 +123,22 @@ int main(int argc, char **argv)
   TheHMC.Resources.AddObservable<QObs>(TopParams);
   
   // Robbins-Monro updater
-  WilsonGaugeActionR bare_action(1.0);
+  WilsonGaugeActionR bare_action(beta);
   typedef ConstrainedAction<WilsonGaugeActionR> ConstrainedWilsonGaugeAction;
   ConstrainedActionParameters action_parameters{.a=alpha0, .S0=S0, .sigma=sigma};
   ConstrainedWilsonGaugeAction constrained_action(bare_action, action_parameters);
   typedef RobbinsMonroSolver<ConstrainedWilsonGaugeAction> Solver;
   Solver solver(constrained_action, RobbinsMonroParameters(100, 10, 5, 1.0));
   typedef RobbinsMonroSolverModule<Solver> RmMod;
-  TheHMC.Resources.AddObservable<RmMod>(solver);
-    
+  if (doLLR)
+    TheHMC.Resources.AddObservable<RmMod>(solver);
+  
   // Collect actions
   ActionLevel<HMCWrapper::Field> Level1(1);
-  Level1.push_back(&constrained_action);
+  if (doLLR)
+    Level1.push_back(&constrained_action);
+  else
+    Level1.push_back(&bare_action);    
   TheHMC.TheAction.push_back(Level1);
     
   // HMC parameters are serialisable
@@ -130,10 +152,12 @@ int main(int argc, char **argv)
   TheHMC.Run();  // no smearing
   
   // Report final values
-  RealD mean_action = solver.status().last_update.mean_action;
-  RealD a_final  = constrained_action.parameters().a;
-  std::cout << GridLogMessage << "Example_LLR: a_final = " << a_final << ", Sunconstrained = " << mean_action << std::endl;
-
+  if (doLLR) {
+    RealD mean_action = solver.status().last_update.mean_action;
+    RealD a_final  = constrained_action.parameters().a;
+    std::cout << GridLogMessage << "Example_LLR: a_final = " << a_final << ", Sunconstrained = " << mean_action << std::endl;
+  }
+  
   Grid_finalize();
 
 } // main
