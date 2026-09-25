@@ -36,11 +36,20 @@ directory
  *
  * Uses the constrained action
  *   \f$\beta S[U] \rightarrow aS[U] + (S[U]-S_0)^2/(2\sigma^2)\f$
- * The initial \f$a\f$ and \f$S_0\f$ can be set on the command line with
- * `--a_init <value> --S0_init <value>`.
- * The above behaviour can be turned off with `--noLLR`, in which case
- * the unconstrained action is used. In both cases, \f$beta\f$ can also
- * be provided in the command line with `--beta <value>`
+ *
+ * Parameters that can be provided in the command line:
+ * - the initial \f$a\f$: `--a_init <value>`. Default = 1
+ * - the initial \f$S_0\f$: `--S0_init <value>`. Default = 1000
+ * - the Robbins-Monro solver parameters and number of iterations:
+ *   `--rm_params <n_thermalisation>,<n_rethermalisation>,<n_accumulation>,<n_iter>`.
+ *   Default = (100, 10, 5, 14)
+ *   The number of trajectories is calculated from those parameters.
+ *
+ * The LLR algorithm can be turned off with `--noLLR`, in which case
+ * the unconstrained action is used.
+ * Parameters that can be provided in the command line:
+ * - the \f$beta\f$ of the unconstrained action: `--beta <value>`. Default = 1
+ * - the number of trajectories: `--n_traj <value>`. Default = 300
  */
 
 int main(int argc, char **argv) 
@@ -50,17 +59,26 @@ int main(int argc, char **argv)
   Grid_init(&argc, &argv);
   GridLogLayout();
 
-  // Starting values for solver parameters
+  std::string gaugeGroup = "SU(3)";
+  if (Sp2n_config) {
+    gaugeGroup = "Sp(4)";
+  }
+
+  // Parse command line for action and solver parameters
   bool doLLR = true;
   if( GridCmdOptionExists(argv, argv+argc, "--noLLR") ) {
-    std::cout << GridLogMessage << "Example_LLR: turning off the constrained action and R-M solver. Provided arguments --a_init and --S0_init will be ignored." << std::endl;
+    std::cout << GridLogMessage << "Example_LLR: no-LLR for " << gaugeGroup << ": turning off the constrained action and R-M solver. Arguments --a_init, --S0_init, and --rm_params will be ignored, but --beta and --n_traj can be provided." << std::endl;
     doLLR = false;
   }
-  RealD alpha0 = 1;
-  RealD S0  = 1000;
-  RealD sigma  = 3.0;
-  RealD beta = 1;
+  else {
+    std::cout << GridLogMessage << "Example_LLR: LLR for " << gaugeGroup << ": running the constrained action and R-M solver. Argument --beta and --n_traj will be ignored, but --a_init, --S0_init, and --rm_params can be provided." << std::endl;
+  }
+  RealD alpha0 = 1, S0  = 1000, sigma  = 3.0;
+  RealD beta = 1; // HAS to be 1 for LLR
+  int n_thermalisation = 100, n_rethermalisation = 10, n_accumulation = 5, n_iter = 14;
+  int n_traj = 300;
   std::string arg;
+  std::vector<int> vec;
   if (doLLR) {
     if( GridCmdOptionExists(argv, argv+argc, "--a_init") ) {
       arg = GridCmdOptionPayload(argv, argv+argc, "--a_init");
@@ -70,19 +88,30 @@ int main(int argc, char **argv)
       arg = GridCmdOptionPayload(argv, argv+argc, "--S0_init");
       GridCmdOptionFloat(arg, S0);
     }
-    std::string gaugeGroup = "SU(3)";
-    if (Sp2n_config) {
-      gaugeGroup = "Sp(4)";
+    if( GridCmdOptionExists(argv, argv+argc, "--rm_params") ) {
+       arg = GridCmdOptionPayload(argv, argv+argc, "--rm_params");
+       GridCmdOptionIntVector(arg,vec);
+       n_thermalisation = vec[0];
+       n_rethermalisation = vec[1];
+       n_accumulation = vec[2];
+       n_iter = vec[3];
+       n_traj = n_thermalisation + n_accumulation + (n_iter -1) * (n_accumulation + n_rethermalisation);
     }
-    std::cout << GridLogMessage << "Example_LLR: Robbins-Monro solver parameters for " << gaugeGroup << ": S0 = " << S0 << ", a = " << alpha0 << ", sigma = " << sigma << std::endl;
+    std::cout << GridLogMessage << "Example_LLR: constrained action parameters: S0 = " << S0 << ", a = " << alpha0 << ", sigma = " << sigma << std::endl;
+    std::cout << GridLogMessage << "Example_LLR: Robbins-Monro solver parameters: n_thermalisation = " << n_thermalisation << ", n_rethermalisation = " << n_rethermalisation << ", n_accumulation = " << n_accumulation << ", n_iter = " << n_iter << ", n_traj = " << n_traj << std::endl;
   }
-  //  else {
+  else {
     if( GridCmdOptionExists(argv, argv+argc, "--beta") ) {
       arg = GridCmdOptionPayload(argv, argv+argc, "--beta");
       GridCmdOptionFloat(arg, beta);
     }
-    //}
+    if( GridCmdOptionExists(argv, argv+argc, "--n_traj") ) {
+      arg = GridCmdOptionPayload(argv, argv+argc, "--n_traj");
+      GridCmdOptionInt(arg, n_traj);
+    }
     std::cout << GridLogMessage << "Example_LLR: unconstrained action beta = " << beta << std::endl;
+    std::cout << GridLogMessage << "Example_LLR: MD trajectories n_traj = " << n_traj << std::endl;
+  }
   
   // The HMC runner
   typedef GenericHMCRunner<MinimumNorm2> HMCWrapper;  // Uses the default minimum norm
@@ -128,7 +157,7 @@ int main(int argc, char **argv)
   ConstrainedActionParameters action_parameters{.a=alpha0, .S0=S0, .sigma=sigma};
   ConstrainedWilsonGaugeAction constrained_action(bare_action, action_parameters);
   typedef RobbinsMonroSolver<ConstrainedWilsonGaugeAction> Solver;
-  Solver solver(constrained_action, RobbinsMonroParameters(100, 10, 5, 1.0));
+  Solver solver(constrained_action, RobbinsMonroParameters(n_thermalisation, n_rethermalisation, n_accumulation, 1.0));
   typedef RobbinsMonroSolverModule<Solver> RmMod;
   if (doLLR)
     TheHMC.Resources.AddObservable<RmMod>(solver);
@@ -142,7 +171,7 @@ int main(int argc, char **argv)
   TheHMC.TheAction.push_back(Level1);
     
   // HMC parameters are serialisable
-  TheHMC.Parameters.Trajectories = 305;
+  TheHMC.Parameters.Trajectories = n_traj;
   TheHMC.Parameters.NoMetropolisUntil = 0;
   TheHMC.Parameters.MD.MDsteps = 100;
   TheHMC.Parameters.MD.trajL   = 1.0;

@@ -56,8 +56,8 @@ class ConstrainedAction : public Action<typename WrappedAction::GaugeField>
  * Implements the constrained action
  *   \f$\beta S[U] \rightarrow aS[U] + (S[U]-S_0)^2/(2\sigma^2)\f$
  * given a gauge action S.
- * Assumes that \f$\beta\f$ can be freely set to 1 in order to perform
- * the direct replacement of \f$S[U]\f$.
+ * Assumes that \f$\beta\f$ for the unconstrained action has been set to 1
+ * in order to perform the direct replacement of \f$S[U]\f$.
  *
  * Expects a single template parameter for the related unconstrained action.
  * @param WrappedAction: The unconstrained action type.
