@@ -32,7 +32,7 @@ directory
 
 #include <Grid/qcd/llr/RobbinsMonroSolver.h>
 #include <Grid/qcd/observables/hmc_observable.h>
-#include <Grid/qcd/modules/Modules.h>
+#include <Grid/qcd/modules/ObservableModules.h>
 
 NAMESPACE_BEGIN(Grid);
 
@@ -46,22 +46,13 @@ inline void LogRobbinsMonroUpdate(const RobbinsMonroUpdate &update,
             << ", a: " << update.previous_a << " -> " << update.updated_a << std::endl;
 }
 
-
 template <class RMSolver>
-class RobbinsMonroSolverModule
-    : public HMCModuleBase<HmcObservable<typename RMSolver::Field> >,
-      public HmcObservable<typename RMSolver::Field> {
+class LLRActionLogger : public HmcObservable<typename RMSolver::Field> {
+
 public:
   typedef typename RMSolver::Field Field;
-  typedef HMCModuleBase<HmcObservable<Field> > Base;
-  typedef typename Base::Product Product;
-
-  explicit RobbinsMonroSolverModule(RMSolver &solver) : solver_(solver) {}
-
-  virtual Product *getPtr()
-  {
-    return this;
-  }
+  
+  LLRActionLogger(RMSolver &solver) : solver_(solver) {}
 
   virtual void TrajectoryComplete(int trajectory, Field &U,
                                   GridSerialRNG &, GridParallelRNG &)
@@ -81,8 +72,18 @@ public:
     report_update(previous_iteration);
   }
 
+  std::vector<RealD> getMeanActionVector()
+  {
+    //std::cout << "In getMeanActionVector " << mean_action_.size() << std::endl;
+    std::vector<RealD> out;
+    out = mean_action_;
+    //std::cout << "In getMeanActionVector " << out.size() << std::endl;
+    return out;
+  }
+
 private:
   RMSolver &solver_;
+  std::vector<RealD> mean_action_;
 
   void report_update(int previous_iteration)
   {
@@ -93,9 +94,30 @@ private:
     }
 
     LogRobbinsMonroUpdate(status.last_update, "");
+    //std::cout << mean_action_.size() << std::endl;
+    mean_action_.push_back(status.last_update.mean_action);
+    //std::cout << mean_action_.size() << std::endl;
     std::cout << GridLogMessage << "[Action Parameters]" << std::endl;
     std::cout << solver_.action_.LogParameters();
   }
+};
+
+
+
+template <class RMSolver>
+class RobbinsMonroSolverModule
+  : public ObservableModule<LLRActionLogger<RMSolver>, NoParameters> {
+public:
+  typedef typename RMSolver::Field Field;
+
+  typedef ObservableModule<LLRActionLogger<RMSolver>, NoParameters> ObsBase;
+  using ObsBase::ObsBase;
+
+  RobbinsMonroSolverModule(RMSolver &solver): ObsBase(NoParameters()) {
+    this->ObservablePtr.reset(new LLRActionLogger<RMSolver>(solver));
+  }
+  
+  virtual void initialize(){}
 };
 
 NAMESPACE_END(Grid);

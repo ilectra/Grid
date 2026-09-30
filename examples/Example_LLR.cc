@@ -32,6 +32,8 @@ directory
 #include <Grid/Grid.h>
 #include <Grid/qcd/llr/RobbinsMonroSolverModule.h>
 
+using namespace Grid;
+
 /*! @brief Example HMC run of the LLR workflow.
  *
  * Uses the constrained action
@@ -179,6 +181,17 @@ int main(int argc, char **argv)
   TheHMC.ReadCommandLine(argc, argv); // these can be parameters from file
   
   TheHMC.Run();  // no smearing
+
+  //std::vector<HmcObservable<typename HMCWrapper::Field>* > theObservables = TheHMC.Resources.GetObservables();
+  auto theObservables = TheHMC.Resources.GetObservables();
+  int nObs = theObservables.size();
+  //std::cout << nObs << "  " << typeid(theObservables[nObs-2]).name() << std::endl;
+  typedef LLRActionLogger<Solver> ActionLogger;
+  ActionLogger* theRMmodule = reinterpret_cast<ActionLogger*>(theObservables[nObs-2]);
+  //std::cout << typeid(theRMmodule).name() << std::endl;
+  std::vector<RealD> theActions = theRMmodule->getMeanActionVector();
+  //std::cout << theActions.size() << std::endl;
+  std::cout << theActions << std::endl;
   
   // Report final values
   if (doLLR) {
