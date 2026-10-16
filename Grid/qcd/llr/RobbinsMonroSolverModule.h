@@ -72,10 +72,10 @@ public:
     report_update(previous_iteration);
   }
 
-  std::vector<RealD> getMeanActionVector()
+  std::vector<std::pair<int, RealD> > getMeanActionVector()
   {
     //std::cout << "In getMeanActionVector " << mean_action_.size() << std::endl;
-    std::vector<RealD> out;
+    std::vector<std::pair<int, RealD> > out;
     out = mean_action_;
     //std::cout << "In getMeanActionVector " << out.size() << std::endl;
     return out;
@@ -83,7 +83,7 @@ public:
 
 private:
   RMSolver &solver_;
-  std::vector<RealD> mean_action_;
+  std::vector<std::pair<int, RealD> > mean_action_;
 
   void report_update(int previous_iteration)
   {
@@ -95,7 +95,7 @@ private:
 
     LogRobbinsMonroUpdate(status.last_update, "");
     //std::cout << mean_action_.size() << std::endl;
-    mean_action_.push_back(status.last_update.mean_action);
+    mean_action_.push_back(std::pair<int, RealD>(status.last_update.trajectory, status.last_update.mean_action));
     //std::cout << mean_action_.size() << std::endl;
     std::cout << GridLogMessage << "[Action Parameters]" << std::endl;
     std::cout << solver_.action_.LogParameters();

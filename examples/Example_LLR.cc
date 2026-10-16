@@ -54,6 +54,8 @@ using namespace Grid;
  * - the number of trajectories: `--n_traj <value>`. Default = 300
  */
 
+// TODO: unit tests for edge cases of number of trajectories in various phases (eg. rethrm=0, therm=0, correct phase at end?)
+
 int main(int argc, char **argv) 
 {
   using namespace Grid;
@@ -191,7 +193,7 @@ int main(int argc, char **argv)
     typedef LLRActionLogger<Solver> ActionLogger;
     ActionLogger* theRMmodule = reinterpret_cast<ActionLogger*>(theObservables[nObs-2]);
     //std::cout << typeid(theRMmodule).name() << std::endl;
-    std::vector<RealD> theActions = theRMmodule->getMeanActionVector();
+    std::vector<std::pair<int, RealD> > theActions = theRMmodule->getMeanActionVector();
     //std::cout << theActions.size() << std::endl;
     std::cout << theActions << std::endl;
   
