@@ -108,7 +108,19 @@ struct RobbinsMonroStatus
   RobbinsMonroUpdate last_update; ///< @brief The last \f$a\f$ update information structure
 };
 
-template <class ConstrainedActionType>
+typedef void (*accum)(RobbinsMonroUpdate&, RealD, RealD, int);
+void RM(RobbinsMonroUpdate &update, RealD gain, RealD sigma, int iteration)
+{
+  update.updated_a = update.previous_a + gain * update.residual / (sigma * sigma * iteration);
+}
+
+void NR(RobbinsMonroUpdate &update, RealD gain, RealD sigma, int iteration)
+{
+  update.updated_a = update.previous_a + gain * update.residual / (sigma * sigma);
+}
+
+
+template <class ConstrainedActionType, accum Accumulator>
 class RobbinsMonroSolver
 /*! @brief The Robbins-Monro solver.
  *
@@ -211,7 +223,7 @@ private:
     update.mean_action = status_.accumulated_action / parameters_.trajectories_per_update;
     update.residual = update.mean_action - action_.parameters().S0;
     update.previous_a = action_.parameters().a;
-    update.updated_a = update.previous_a + parameters_.gain * update.residual / (action_.parameters().sigma * action_.parameters().sigma * status_.iteration);
+    Accumulator(update, parameters_.gain, action_.parameters().sigma, status_.iteration);
 
     action_.set_a(update.updated_a);
     status_.last_update = update;

@@ -160,7 +160,7 @@ int main(int argc, char **argv)
   typedef ConstrainedAction<WilsonGaugeActionR> ConstrainedWilsonGaugeAction;
   ConstrainedActionParameters action_parameters{.a=alpha0, .S0=S0, .sigma=sigma};
   ConstrainedWilsonGaugeAction constrained_action(bare_action, action_parameters);
-  typedef RobbinsMonroSolver<ConstrainedWilsonGaugeAction> Solver;
+  typedef RobbinsMonroSolver<ConstrainedWilsonGaugeAction, &RM> Solver;
   Solver solver(constrained_action, RobbinsMonroParameters(n_thermalisation, n_rethermalisation, n_accumulation, 1.0));
   typedef RobbinsMonroSolverModule<Solver> RmMod;
   if (doLLR)
