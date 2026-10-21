@@ -55,6 +55,15 @@ using namespace Grid;
  * - the number of trajectories: `--n_traj <value>`. Default = 300
  */
 
+
+// User-defined updater - it can be anything, this is just an example
+void NullUpdater(LLRSolverUpdate &update, RealD gain, RealD sigma, int iteration)
+{
+  std::cout << GridLogMessage << "Example_LLR: Calling custom updater." << std::endl;
+  update.updated_a = update.previous_a;
+}
+
+
 int main(int argc, char **argv) 
 {
   using namespace Grid;
@@ -154,16 +163,23 @@ int main(int argc, char **argv)
   TopParams.Smearing.maxTau = 2.0; 
   TheHMC.Resources.AddObservable<QObs>(TopParams);
   
-  // Robbins-Monro updater
   WilsonGaugeActionR bare_action(beta);
   typedef ConstrainedAction<WilsonGaugeActionR> ConstrainedWilsonGaugeAction;
   ConstrainedActionParameters action_parameters{.a=alpha0, .S0=S0, .sigma=sigma};
   ConstrainedWilsonGaugeAction constrained_action(bare_action, action_parameters);
+  // Null updater (user-defined)
+  typedef LLRSolver<ConstrainedWilsonGaugeAction, &NullUpdater> SolverN;
+  SolverN solverN(constrained_action, LLRSolverParameters(n_thermalisation, n_rethermalisation, n_accumulation, 1.0));
+  typedef LLRSolverModule<SolverN> NullMod;
+  // Robbins-Monro updater
   typedef LLRSolver<ConstrainedWilsonGaugeAction, &RobbinsMonro> Solver;
   Solver solver(constrained_action, LLRSolverParameters(n_thermalisation, n_rethermalisation, n_accumulation, 1.0));
   typedef LLRSolverModule<Solver> RmMod;
   if (doLLR)
-    TheHMC.Resources.AddObservable<RmMod>(solver);
+    {
+      TheHMC.Resources.AddObservable<NullMod>(solverN);
+      TheHMC.Resources.AddObservable<RmMod>(solver);
+    }
   
   // Collect actions
   ActionLevel<HMCWrapper::Field> Level1(1);
@@ -185,9 +201,12 @@ int main(int argc, char **argv)
 
   // Report final values
   if (doLLR) {
+    RealD mean_actionN = solverN.status().last_update.mean_action;
     RealD mean_action = solver.status().last_update.mean_action;
+    RealD last_aN = solverN.status().last_update.updated_a;
+    RealD last_a = solver.status().last_update.updated_a;
     RealD a_final  = constrained_action.parameters().a;
-    std::cout << GridLogMessage << "Example_LLR: a_final = " << a_final << ", Sunconstrained = " << mean_action << std::endl;
+    std::cout << GridLogMessage << "Example_LLR: a_final = " << a_final << ", last_a = " << last_a << ", last_a Null = " << last_aN << ", Sunconstrained = " << mean_action << ", Sunconstrained Null = " << mean_actionN << std::endl;
   }
   
   Grid_finalize();
