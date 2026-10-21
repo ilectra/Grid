@@ -36,13 +36,20 @@ int main(int argc, char **argv)
 {
   using namespace Grid;
 
-  Grid_init(&argc, &argv);
+  // Ignore command line arguments and enforce --grid 4.4.4.4
+  int updatedArgc = 3;
+  char** updatedArgv = (char**)malloc(sizeof(char*) * 4);
+  updatedArgv[0] = argv[0];
+  updatedArgv[1] = (char*)(new std::string("--grid"))->c_str();
+  updatedArgv[2] = (char*)(new std::string("4.4.4.4"))->c_str();
+  updatedArgv[3] = nullptr;
+  Grid_init(&updatedArgc, &updatedArgv);
   GridLogLayout();
 
   // Starting and expected final values for solver parameters
-  RealD alpha0 = 1;
-  RealD S0  = 1000;
-  RealD sigma  = 3.0;
+  RealD alpha0 = 1, S0  = 1000, sigma  = 3.0;
+  int n_thermalisation = 100, n_rethermalisation = 10, n_accumulation = 5, n_iter = 14;
+  int n_traj = n_thermalisation + n_accumulation + (n_iter -1) * (n_accumulation + n_rethermalisation); // 300 for default values
   RealD a_expected = alpha0;
   RealD epsilon_a = 0.3;
   int n_steps = 8;
@@ -66,7 +73,7 @@ int main(int argc, char **argv)
     typedef GenericHMCRunner<MinimumNorm2> HMCWrapper;  // Uses the default minimum norm
     HMCWrapper TheHMC;
     
-    // Grid from the command line
+    // The grid
     TheHMC.Resources.AddFourDimGrid("gauge");
     
     // Checkpointer definition
@@ -106,13 +113,8 @@ int main(int argc, char **argv)
     typedef ConstrainedAction<WilsonGaugeActionR> ConstrainedWilsonGaugeAction;
     ConstrainedActionParameters action_parameters{.a=alpha, .S0=S0, .sigma=sigma};
     ConstrainedWilsonGaugeAction constrained_action(bare_action, action_parameters);
-    //WilsonGaugeActionR::GaugeField U(TheHMC.Resources.GetCartesian("gauge"));
-    //if (Sp2n_config)
-    //  Sp<Nc>::ColdConfiguration(U);
-    //else
-    //  SU<Nc>::ColdConfiguration(U);
-    typedef RobbinsMonroSolver<ConstrainedWilsonGaugeAction> Solver;
-    Solver solver(constrained_action, RobbinsMonroParameters(100, 10, 5, 1.0));
+    typedef RobbinsMonroSolver<ConstrainedWilsonGaugeAction, &RM> Solver;
+    Solver solver(constrained_action, RobbinsMonroParameters(n_thermalisation, n_rethermalisation, n_accumulation, 1.0));
     typedef RobbinsMonroSolverModule<Solver> RmMod;
     TheHMC.Resources.AddObservable<RmMod>(solver);
     
@@ -122,14 +124,26 @@ int main(int argc, char **argv)
     TheHMC.TheAction.push_back(Level1);
     
     // HMC parameters are serialisable
-    TheHMC.Parameters.Trajectories = 305;
+    TheHMC.Parameters.Trajectories = n_traj;
     TheHMC.Parameters.NoMetropolisUntil = 0;
     TheHMC.Parameters.MD.MDsteps = 100;
     TheHMC.Parameters.MD.trajL   = 1.0;
     
-    TheHMC.ReadCommandLine(argc, argv); // these can be parameters from file
+    //TheHMC.ReadCommandLine(argc, argv); // these can be parameters from file
     
     TheHMC.Run();  // no smearing
+    
+    // Report intermediate action values
+    auto theObservables = TheHMC.Resources.GetObservables();
+    int nObs = theObservables.size();
+    typedef LLRActionLogger<Solver> ActionLogger;
+    // The LLRActionLogger is the second-to-last observable and not the last one,
+    // because the checkpointer is always added to the end of the observables list
+    // by GetObservables().
+    // This is fragile, it would be nice to be able to fish out the observable name instead
+    ActionLogger* theRMmodule = reinterpret_cast<ActionLogger*>(theObservables[nObs-2]);
+    std::vector<std::pair<int, RealD> > theActions = theRMmodule->getMeanActionVector();
+    std::cout << GridLogMessage << "Test_robbins_monro_solver: Pairs of trajectory-mean_action for every iteration: " << theActions << std::endl;
     
     // test final values
     RealD mean_action = solver.status().last_update.mean_action;

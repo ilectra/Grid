@@ -186,17 +186,6 @@ int main(int argc, char **argv)
 
   // Report final values
   if (doLLR) {
-    //std::vector<HmcObservable<typename HMCWrapper::Field>* > theObservables = TheHMC.Resources.GetObservables();
-    auto theObservables = TheHMC.Resources.GetObservables();
-    int nObs = theObservables.size();
-    //std::cout << nObs << "  " << typeid(theObservables[nObs-2]).name() << std::endl;
-    typedef LLRActionLogger<Solver> ActionLogger;
-    ActionLogger* theRMmodule = reinterpret_cast<ActionLogger*>(theObservables[nObs-2]);
-    //std::cout << typeid(theRMmodule).name() << std::endl;
-    std::vector<std::pair<int, RealD> > theActions = theRMmodule->getMeanActionVector();
-    //std::cout << theActions.size() << std::endl;
-    std::cout << theActions << std::endl;
-  
     RealD mean_action = solver.status().last_update.mean_action;
     RealD a_final  = constrained_action.parameters().a;
     std::cout << GridLogMessage << "Example_LLR: a_final = " << a_final << ", Sunconstrained = " << mean_action << std::endl;
