@@ -10,6 +10,7 @@ Author: Peter Boyle <pabobyle@ph.ed.ac.uk>
 Author: neo <cossu@post.kek.jp>
 Author: Guido Cossu <guido.cossu@ed.ac.uk>
 Author: Ryan Hill <guido.cossu@ed.ac.uk>
+Author: Ilektra Christidi <ilektra.christidi@ucl.ac.uk>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -30,7 +31,9 @@ directory
 *************************************************************************************/
 /*  END LEGAL */
 #include <Grid/Grid.h>
-#include <Grid/qcd/llr/RobbinsMonroSolverModule.h>
+#include <Grid/qcd/llr/LLRSolverModule.h>
+
+// TODO: unit tests for edge cases of number of trajectories in various phases (eg. rethrm=0, therm=0, correct phase at end?)
 
 int main(int argc, char **argv) 
 {
@@ -108,14 +111,14 @@ int main(int argc, char **argv)
     TheHMC.Resources.AddObservable<QObs>(TopParams);
     
     // Robbins-Monro updater
-    WilsonGaugeActionR bare_action(1.0);
+    WilsonGaugeActionR bare_action(1.0); // beta HAS to be 1 for LLR
     RealD alpha = a_init_scan[i];
     typedef ConstrainedAction<WilsonGaugeActionR> ConstrainedWilsonGaugeAction;
     ConstrainedActionParameters action_parameters{.a=alpha, .S0=S0, .sigma=sigma};
     ConstrainedWilsonGaugeAction constrained_action(bare_action, action_parameters);
-    typedef RobbinsMonroSolver<ConstrainedWilsonGaugeAction, &RM> Solver;
-    Solver solver(constrained_action, RobbinsMonroParameters(n_thermalisation, n_rethermalisation, n_accumulation, 1.0));
-    typedef RobbinsMonroSolverModule<Solver> RmMod;
+    typedef LLRSolver<ConstrainedWilsonGaugeAction, &RobbinsMonro> Solver;
+    Solver solver(constrained_action, LLRParameters(n_thermalisation, n_rethermalisation, n_accumulation, 1.0));
+    typedef LLRSolverModule<Solver> RmMod;
     TheHMC.Resources.AddObservable<RmMod>(solver);
     
     // Collect actions

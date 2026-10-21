@@ -2,11 +2,12 @@
 
 Grid physics library, www.github.com/paboyle/Grid
 
-Source file: RobbinsMonroSolver.h
+Source file: LLRSolver.h
 
 Copyright (C) 2026
 
 Author: Ryan Hill <Ryan.Hill@ed.ac.uk>
+Author: Ilektra Christidi <ilektra.christidi@ucl.ac.uk>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -40,19 +41,19 @@ directory
 NAMESPACE_BEGIN(Grid);
 /// \endcond
 
-enum class RobbinsMonroPhase
-/*! @brief The Robbins-Monro solver phase.
+enum class LLRSolverPhase
+/*! @brief The LLR solver phase.
  *
  * It can either be Thermalising or Accumulating. When/How long the solver
- * stays in each phase is controlled by the RobbinsMonroParameters structure.
+ * stays in each phase is controlled by the LLRSolverParameters structure.
  */
 {
   Thermalising,
   Accumulating
 };
 
-struct RobbinsMonroParameters
-/*! @brief The parameters controlling the Robbins-Monro solver.
+struct LLRSolverParameters
+/*! @brief The parameters controlling the LLR solver.
  *
  * Those include, among others, the number of trajectories in each phase.
  */
@@ -62,7 +63,7 @@ struct RobbinsMonroParameters
   int trajectories_per_update; ///< @brief The number of trajectories to accumulate per update
   RealD gain; ///< @brief The gain used to calculate the new \f$a\f$ in every update
 
-  /*! @brief Construct a RobbinsMonroParameters structure.
+  /*! @brief Construct a LLRSolverParameters structure.
    * @param[in] initial_thermalisation_trajectories_: the number of trajectories
    *            to use for initial thermalisation
    * @param[in] rethermalisation_trajectories_: the number of trajectories
@@ -71,7 +72,7 @@ struct RobbinsMonroParameters
    *            per update
    * @param[in] gain_: the gain used to calculate the new \f$a\f$ in every update
    */
-  RobbinsMonroParameters(int initial_thermalisation_trajectories_ = 0,
+  LLRSolverParameters(int initial_thermalisation_trajectories_ = 0,
                          int rethermalisation_trajectories_ = 0,
                          int trajectories_per_update_ = 1,
                          RealD gain_ = 1.0)
@@ -82,9 +83,9 @@ struct RobbinsMonroParameters
   {}
 };
 
-struct RobbinsMonroUpdate
+struct LLRSolverUpdate
 /*! @brief Structure holding useful information every time \f$a\f$ is updated
- * by the Robbins-Monro solver.
+ * by the LLR solver.
  */
 {
   int trajectory; ///< @brief The current trajectory at update time
@@ -95,52 +96,61 @@ struct RobbinsMonroUpdate
   RealD updated_a; ///< @brief The \f$a\f$ parameter of the current update
 };
 
-struct RobbinsMonroStatus
-/*! @brief Structure holding the Robbins-Monro solver status.
+struct LLRSolverStatus
+/*! @brief Structure holding the LLR solver status.
  *
  * Needed for replica-swapping.
  */
 {
-  RobbinsMonroPhase phase; ///< @brief The current phase of the solver (Thermalising or Accumulating)
+  LLRSolverPhase phase; ///< @brief The current phase of the solver (Thermalising or Accumulating)
   int iteration; ///< @brief The current iteration
   int trajectories_remaining_in_phase; ///< @brief The number of trajectories remaining in the current phase
   RealD accumulated_action; ///< @brief The unconstrained action accumulated so far in this update interval
-  RobbinsMonroUpdate last_update; ///< @brief The last \f$a\f$ update information structure
+  LLRSolverUpdate last_update; ///< @brief The last \f$a\f$ update information structure
 };
 
-typedef void (*accum)(RobbinsMonroUpdate&, RealD, RealD, int);
-void RM(RobbinsMonroUpdate &update, RealD gain, RealD sigma, int iteration)
+/*! @brief Predefined solver updaters (currently Robbins-Monro and Newton-Raphson).
+ * The user can also define their own locally in their application.
+ *
+ * @param[inout] update: The LLRSolverUpdate structure to modify
+ * @param[in] gain: the gain used to calculate the new \f$a\f$ in every update
+ * @param[in] sigma: the constrained action sigma
+ * @param[in] iteration: the current iteration at update time
+ */
+typedef void (*updater)(LLRSolverUpdate&, RealD, RealD, int);
+void RobbinsMonro(LLRSolverUpdate &update, RealD gain, RealD sigma, int iteration)
 {
   update.updated_a = update.previous_a + gain * update.residual / (sigma * sigma * iteration);
 }
 
-void NR(RobbinsMonroUpdate &update, RealD gain, RealD sigma, int iteration)
+void NewtonRaphson(LLRSolverUpdate &update, RealD gain, RealD sigma, int iteration)
 {
   update.updated_a = update.previous_a + gain * update.residual / (sigma * sigma);
 }
 
 
-template <class ConstrainedActionType, accum Accumulator>
-class RobbinsMonroSolver
-/*! @brief The Robbins-Monro solver.
+template <class ConstrainedActionType, updater Updater>
+class LLRSolver
+/*! @brief The LLR solver.
  *
- * Expects a single template parameter for the constrained action.
+ * Expects two template parameters:
  * @param ConstrainedActionType: The constrained action type.
+ * @param Updater: The solver updater.
  */
 {
 public:
   typedef ConstrainedActionType ActionType;
   typedef typename ActionType::GaugeField Field;
   
-  /*! @brief Construct a Robbins-Monro solver.
+  /*! @brief Construct an LLR solver.
    * @param[in] action: the constrained action
-   * @param[in] parameters: the RobbinsMonroParameters parameter structure
+   * @param[in] parameters: the LLRSolverParameters parameter structure
    */
-  RobbinsMonroSolver(ActionType &action, RobbinsMonroParameters parameters)
+  LLRSolver(ActionType &action, LLRSolverParameters parameters)
       : action_(action)
       , parameters_(parameters)
       , status_{
-          .phase=RobbinsMonroPhase::Accumulating,
+          .phase=LLRSolverPhase::Accumulating,
           .iteration=1,
           .trajectories_remaining_in_phase=parameters.trajectories_per_update,
           .accumulated_action=0
@@ -148,12 +158,12 @@ public:
   {
     if (parameters_.initial_thermalisation_trajectories != 0)
     {
-      status_.phase = RobbinsMonroPhase::Thermalising;
+      status_.phase = LLRSolverPhase::Thermalising;
       status_.trajectories_remaining_in_phase = parameters_.initial_thermalisation_trajectories;
     }
   }
 
-  /*! @brief Call the appropriate phase of the Robbins-Monro solver based on
+  /*! @brief Call the appropriate phase of the LLR solver based on
    * the current status.
    * @param[in] trajectory: the current trajectory number
    * @param[in] U: the gauge field
@@ -161,14 +171,14 @@ public:
   void record_configuration(int trajectory, Field &U)
   {
     status_.trajectories_remaining_in_phase--;
-    if (status_.phase == RobbinsMonroPhase::Accumulating)
+    if (status_.phase == LLRSolverPhase::Accumulating)
     {
-      std::cout << GridLogMessage << "RM Phase: Accumulating (remaining trajectories: " << status_.trajectories_remaining_in_phase << ")" << std::endl;
+      std::cout << GridLogMessage << "LLR Phase: Accumulating (remaining trajectories: " << status_.trajectories_remaining_in_phase << ")" << std::endl;
       accumulate(trajectory, U);
     }
     else // Thermalising
     {
-      std::cout << GridLogMessage << "RM Phase: Thermalising (remaining trajectories: " << status_.trajectories_remaining_in_phase << ")" << std::endl;
+      std::cout << GridLogMessage << "LLR Phase: Thermalising (remaining trajectories: " << status_.trajectories_remaining_in_phase << ")" << std::endl;
       thermalise();
     }
   }
@@ -184,26 +194,26 @@ public:
   }
 
   // Accessors for replica-swapping
-  /*! @brief Getter for the Robbins-Monro solver parameters.
-   * @returns The solver parameters RobbinsMonroParameters structure
+  /*! @brief Getter for the LLR solver parameters.
+   * @returns The solver parameters LLRSolverParameters structure
    */
-  const RobbinsMonroParameters &parameters() const { return parameters_; }
-  /*! @brief Restore the Robbins-Monro solver state.
-   * @param[in] state: the RobbinsMonroStatus status structure
+  const LLRSolverParameters &parameters() const { return parameters_; }
+  /*! @brief Restore the LLR solver state.
+   * @param[in] state: the LLRSolverStatus status structure
    */
-  void restore_state(const RobbinsMonroStatus &state) { status_ = state; }
-  /*! @brief Getter for the Robbins-Monro solver status object.
-   * @returns The solver RobbinsMonroStatus status structure
+  void restore_state(const LLRSolverStatus &state) { status_ = state; }
+  /*! @brief Getter for the LLR solver status object.
+   * @returns The solver LLRSolverStatus status structure
    */  
-  RobbinsMonroStatus status() const { return status_; }
+  LLRSolverStatus status() const { return status_; }
   
 public:
   ActionType &action_; ///< @brief The constrained action
 private:
-  RobbinsMonroParameters parameters_; ///< @brief The solver parameters structure
-  RobbinsMonroStatus status_; ///< @brief The solver status structure
+  LLRSolverParameters parameters_; ///< @brief The solver parameters structure
+  LLRSolverStatus status_; ///< @brief The solver status structure
 
-  /*! @brief Call the accumulate phase of the Robbins-Monro solver for
+  /*! @brief Call the accumulate phase of the LLR solver for
    * the current trajectory.
    * @param[in] trajectory: the current trajectory number
    * @param[in] U: the gauge field
@@ -217,13 +227,13 @@ private:
     }
 
     // After we've gathered enough samples, perform the update of a.
-    RobbinsMonroUpdate update;
+    LLRSolverUpdate update;
     update.trajectory = trajectory;
     update.iteration = status_.iteration;
     update.mean_action = status_.accumulated_action / parameters_.trajectories_per_update;
     update.residual = update.mean_action - action_.parameters().S0;
     update.previous_a = action_.parameters().a;
-    Accumulator(update, parameters_.gain, action_.parameters().sigma, status_.iteration);
+    Updater(update, parameters_.gain, action_.parameters().sigma, status_.iteration);
 
     action_.set_a(update.updated_a);
     status_.last_update = update;
@@ -231,11 +241,11 @@ private:
     status_.accumulated_action = 0.0;
 
     // Swap over the thermalisation steps to adjust for new value of a.
-    status_.phase = RobbinsMonroPhase::Thermalising;
+    status_.phase = LLRSolverPhase::Thermalising;
     status_.trajectories_remaining_in_phase = parameters_.rethermalisation_trajectories; 
   }
 
-  /*! @brief Call the thermalise phase of the Robbins-Monro solver.
+  /*! @brief Call the thermalise phase of the LLR solver.
    * 
    * Only role here is to switch state to 'Accumulating' when
    * the number of thermalisation steps have passed.
@@ -244,7 +254,7 @@ private:
   {
     if (status_.trajectories_remaining_in_phase <= 0)
     {
-      status_.phase = RobbinsMonroPhase::Accumulating;
+      status_.phase = LLRSolverPhase::Accumulating;
       status_.trajectories_remaining_in_phase = parameters_.trajectories_per_update; 
     }
   }
