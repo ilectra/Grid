@@ -32,6 +32,7 @@ directory
 /*  END LEGAL */
 #include <Grid/Grid.h>
 #include <Grid/qcd/llr/LLRSolverModule.h>
+#include "run_llr_test.cc"
 
 // TODO: unit tests for edge cases of number of trajectories in various phases (eg. rethrm=0, therm=0, correct phase at end?)
 
@@ -50,111 +51,42 @@ int main(int argc, char **argv)
   GridLogLayout();
 
   // Starting and expected final values for solver parameters
-  RealD alpha0 = 1, S0  = 1000, sigma  = 3.0;
+  RealD a0, S0, a_expected, sigma  = 3.0;
   int n_thermalisation = 100, n_rethermalisation = 10, n_accumulation = 5, n_iter = 14;
   int n_traj = n_thermalisation + n_accumulation + (n_iter -1) * (n_accumulation + n_rethermalisation); // 300 for default values
-  RealD a_expected = alpha0;
   RealD epsilon_a = 0.3;
-  int n_steps = 8;
-  std::vector<RealD> a_init_scan(n_steps);
+  int n_steps = 2;
+  std::vector<RealD> a0_scan(n_steps);
+  std::vector<RealD> a_expect_scan(n_steps);
+  std::vector<RealD> S0_scan(n_steps);
+  S0_scan = {768, 870};
   std::string gaugeGroup = "SU(3)";
   if (Sp2n_config) {
-    a_expected = 9;
-    a_init_scan = {-10, -1, 0, 1, 7, 9, 11, 20};
+    a0_scan = {-10, 30};
+    a_expect_scan = {11, 12};
     gaugeGroup = "Sp(4)";
   }
   else {
-    a_expected = 4.55;
-    a_init_scan = {-10, -1, 0, 1, 4, 4.5, 6, 20};
+    a0_scan = {-10, 20};
+    a_expect_scan = {5.5, 5.7};
   }
-  std::cout << GridLogMessage << "Test_robbins_monro_solver: Comparing with expected values for " << gaugeGroup << ": S0 = " << S0 << ", a = " << a_expected << std::endl;
 
-  // Scan starting values for a (including negative and extremes) and run test
-  std::vector<bool> converged(n_steps);
+  // Scan starting values for a (including negative and extremes) and S0 and run test
+  std::vector<bool> converged(n_steps*n_steps);
   for (int i=0; i<n_steps; i++) {
-    // The HMC runner
-    typedef GenericHMCRunner<MinimumNorm2> HMCWrapper;  // Uses the default minimum norm
-    HMCWrapper TheHMC;
+    S0 = S0_scan[i];
+    a_expected = a_expect_scan[i];
+    std::cout << GridLogMessage << "Test_robbins_monro_solver: Comparing with expected values for " <<
+      gaugeGroup << ": S0 = " << S0 << ", a = " << a_expected << std::endl;
     
-    // The grid
-    TheHMC.Resources.AddFourDimGrid("gauge");
-    
-    // Checkpointer definition
-    CheckpointerParameters CPparams;  
-    CPparams.config_prefix = "ckpoint_lat";
-    CPparams.rng_prefix = "ckpoint_rng";
-    CPparams.saveInterval = 65535;
-    CPparams.format = "IEEE64BIG";
-    
-    TheHMC.Resources.LoadNerscCheckpointer(CPparams);
+    for (int j=0; j<n_steps; j++) {
+      a0 = a0_scan[j];
 
-    // The RNG
-    RNGModuleParameters RNGpar;
-    RNGpar.serial_seeds = "1 2 3 4 5";
-    RNGpar.parallel_seeds = "6 7 8 9 10";
-    TheHMC.Resources.SetRNGSeeds(RNGpar);
-    
-    // Construct observables
-    typedef PlaquetteMod<HMCWrapper::ImplPolicy> PlaqObs;
-    TheHMC.Resources.AddObservable<PlaqObs>();
-    
-    typedef TopologicalChargeMod<HMCWrapper::ImplPolicy> QObs;
-    TopologyObsParameters TopParams;
-    TopParams.interval = 1;
-    TopParams.do_smearing = false;
-    TopParams.Smearing.init_step_size = 0.01;
-    TopParams.Smearing.tolerance = 1e-5;
-    //  TopParams.Smearing.steps = 200;
-    //  TopParams.Smearing.step_size = 0.01;
-    TopParams.Smearing.meas_interval = 50;
-    TopParams.Smearing.maxTau = 2.0; 
-    TheHMC.Resources.AddObservable<QObs>(TopParams);
-    
-    // Robbins-Monro updater
-    WilsonGaugeActionR bare_action(1.0); // beta HAS to be 1 for LLR
-    RealD alpha = a_init_scan[i];
-    typedef ConstrainedAction<WilsonGaugeActionR> ConstrainedWilsonGaugeAction;
-    ConstrainedActionParameters action_parameters{.a=alpha, .S0=S0, .sigma=sigma};
-    ConstrainedWilsonGaugeAction constrained_action(bare_action, action_parameters);
-    typedef LLRSolver<ConstrainedWilsonGaugeAction, &RobbinsMonro> Solver;
-    Solver solver(constrained_action, LLRParameters(n_thermalisation, n_rethermalisation, n_accumulation, 1.0));
-    typedef LLRSolverModule<Solver> RmMod;
-    TheHMC.Resources.AddObservable<RmMod>(solver);
-    
-    // Collect actions
-    ActionLevel<HMCWrapper::Field> Level1(1);
-    Level1.push_back(&constrained_action);
-    TheHMC.TheAction.push_back(Level1);
-    
-    // HMC parameters are serialisable
-    TheHMC.Parameters.Trajectories = n_traj;
-    TheHMC.Parameters.NoMetropolisUntil = 0;
-    TheHMC.Parameters.MD.MDsteps = 100;
-    TheHMC.Parameters.MD.trajL   = 1.0;
-    
-    //TheHMC.ReadCommandLine(argc, argv); // these can be parameters from file
-    
-    TheHMC.Run();  // no smearing
-    
-    // Report intermediate action values
-    auto theObservables = TheHMC.Resources.GetObservables();
-    int nObs = theObservables.size();
-    typedef LLRActionLogger<Solver> ActionLogger;
-    // The LLRActionLogger is the second-to-last observable and not the last one,
-    // because the checkpointer is always added to the end of the observables list
-    // by GetObservables().
-    // This is fragile, it would be nice to be able to fish out the observable name instead
-    ActionLogger* theRMmodule = reinterpret_cast<ActionLogger*>(theObservables[nObs-2]);
-    std::vector<std::pair<int, RealD> > theActions = theRMmodule->getMeanActionVector();
-    std::cout << GridLogMessage << "Test_robbins_monro_solver: Pairs of trajectory-mean_action for every iteration: " << theActions << std::endl;
-    
-    // test final values
-    RealD mean_action = solver.status().last_update.mean_action;
-    bool S0_converged = std::abs(mean_action - S0) < 2 * sigma;
-    bool a_converged  = std::abs(constrained_action.parameters().a - a_expected) < epsilon_a;
-    converged[i] = S0_converged && a_converged;
-    std::cout << GridLogMessage << "Test_robbins_monro_solver: a_initial = " << alpha << (S0_converged ? ", S0 converged" : ", S0 did not converge") << (a_converged ? ", a converged" : ", a did not converge") << std::endl;
-    std::cout << GridLogMessage << "Test_robbins_monro_solver: a_final = " << constrained_action.parameters().a << ", Sunconstrained = " << mean_action << std::endl;
+      typedef LLRSolver<ConstrainedWilsonGaugeAction, &RobbinsMonro> Solver;
+      ConstrainedActionParameters action_parameters{.a=a0, .S0=S0, .sigma=sigma};
+      LLRSolverParameters solver_parameters(n_thermalisation, n_rethermalisation, n_accumulation, 1.0);
+      converged[i*n_steps+j] = run_test<Solver>(action_parameters, solver_parameters, "robbins_monro", n_traj, a_expected, epsilon_a);
+    }
   }
   
   assert(std::all_of(converged.begin(), converged.end(), [](bool v) { return v; }));
