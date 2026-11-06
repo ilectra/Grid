@@ -336,13 +336,11 @@ public:
   // This function is intended to be called immediately after AddObservable is called.
   void AddObservableName(std::string name){
     assert(ObservablesList.size()>0 && "ObservablesList is empty. Call AddObservable(...) first.");
-    assert(ObservablesList.size()==ObservablesNameMap.size()+1 && "Observables name list is inconsistent. Call AddObservableName(...) with a unique name after every AddObservable(...) call.");
-   ObservablesNameMap[name] = ObservablesList.size()-1;
+    ObservablesNameMap[name] = ObservablesList.size()-1;
   }
 
   // Return index in the ObservablesList of the observable with name
   int GetObservableIndex(std::string name){
-    assert(ObservablesList.size()==ObservablesNameMap.size() && "Observables name list is inconsistent. Call AddObservableName(...) with a unique name after every AddObservable(...) call.");
     assert(ObservablesNameMap.find(name)!=ObservablesNameMap.end() && ("Observables name list does not contain "+name+". Call AddObservableName(...) with the desired name after the appropriate AddObservable(...) call.").c_str());
     return ObservablesNameMap[name];
   }

@@ -73,7 +73,6 @@ bool run_test(ConstrainedActionParameters action_parameters,
   // Construct observables
   typedef PlaquetteMod<HMCWrapper::ImplPolicy> PlaqObs;
   TheHMC.Resources.AddObservable<PlaqObs>();
-  TheHMC.Resources.AddObservableName("plaq");
   
   typedef TopologicalChargeMod<HMCWrapper::ImplPolicy> QObs;
   TopologyObsParameters TopParams;
@@ -86,7 +85,6 @@ bool run_test(ConstrainedActionParameters action_parameters,
   TopParams.Smearing.meas_interval = 50;
   TopParams.Smearing.maxTau = 2.0; 
   TheHMC.Resources.AddObservable<QObs>(TopParams);
-  TheHMC.Resources.AddObservableName("topology");
   
   // LLR updater
   WilsonGaugeActionR bare_action(1.0); // beta HAS to be 1 for LLR
