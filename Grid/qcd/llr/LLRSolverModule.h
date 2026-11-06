@@ -80,9 +80,18 @@ public:
     return out;
   }
 
+  std::vector<std::pair<int, RealD> > getAVector()
+  {
+    std::vector<std::pair<int, RealD> > out;
+    out = a_;
+    return out;
+  }
+
+
 private:
   LLRSolver &solver_;
   std::vector<std::pair<int, RealD> > mean_action_;
+  std::vector<std::pair<int, RealD> > a_;
 
   void report_update(int previous_iteration)
   {
@@ -94,6 +103,7 @@ private:
 
     LogLLRSolverUpdate(status.last_update, "");
     mean_action_.push_back(std::pair<int, RealD>(status.last_update.trajectory, status.last_update.mean_action));
+    a_.push_back(std::pair<int, RealD>(status.last_update.trajectory, status.last_update.previous_a));
     std::cout << GridLogMessage << "[Action Parameters]" << std::endl;
     std::cout << solver_.action_.LogParameters();
   }

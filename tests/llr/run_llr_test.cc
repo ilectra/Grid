@@ -73,6 +73,7 @@ bool run_test(ConstrainedActionParameters action_parameters,
   // Construct observables
   typedef PlaquetteMod<HMCWrapper::ImplPolicy> PlaqObs;
   TheHMC.Resources.AddObservable<PlaqObs>();
+  TheHMC.Resources.AddObservableName("plaq");
   
   typedef TopologicalChargeMod<HMCWrapper::ImplPolicy> QObs;
   TopologyObsParameters TopParams;
@@ -85,6 +86,7 @@ bool run_test(ConstrainedActionParameters action_parameters,
   TopParams.Smearing.meas_interval = 50;
   TopParams.Smearing.maxTau = 2.0; 
   TheHMC.Resources.AddObservable<QObs>(TopParams);
+  TheHMC.Resources.AddObservableName("topology");
   
   // LLR updater
   WilsonGaugeActionR bare_action(1.0); // beta HAS to be 1 for LLR
@@ -92,6 +94,7 @@ bool run_test(ConstrainedActionParameters action_parameters,
   Solver solver(constrained_action, solver_parameters);
   typedef LLRSolverModule<Solver> LLRMod;
   TheHMC.Resources.AddObservable<LLRMod>(solver);
+  TheHMC.Resources.AddObservableName("LLRSolver");
         
   // Collect actions
   ActionLevel<HMCWrapper::Field> Level1(1);
@@ -108,16 +111,14 @@ bool run_test(ConstrainedActionParameters action_parameters,
 
   // Report intermediate action values
   auto theObservables = TheHMC.Resources.GetObservables();
-  int nObs = theObservables.size();
-  // The LLRActionLogger is the second-to-last observable and not the last one,
-  // because the checkpointer is always added to the end of the observables list
-  // by GetObservables().
-  // TODO: This is fragile, it would be nice to be able to fish out the observable name instead
+  int iObs = TheHMC.Resources.GetObservableIndex("LLRSolver");
   typedef LLRActionLogger<Solver> ActionLogger;
-  ActionLogger* theLLRmodule = reinterpret_cast<ActionLogger*>(theObservables[nObs-2]);
+  ActionLogger* theLLRmodule = reinterpret_cast<ActionLogger*>(theObservables[iObs]);
   std::vector<std::pair<int, RealD> > theActions = theLLRmodule->getMeanActionVector();
+  std::vector<std::pair<int, RealD> > theAs = theLLRmodule->getAVector();
   std::cout << GridLogMessage << "Test_" << test_name << "_solver: Pairs of trajectory-mean_action for every iteration: " << theActions << std::endl;
-  
+    std::cout << GridLogMessage << "Test_" << test_name << "_solver: Pairs of trajectory-a for every iteration: " << theAs << std::endl;
+
   // test final values
   RealD mean_action = solver.status().last_update.mean_action;
   bool S0_converged = std::abs(mean_action - S0) < 2 * sigma;
