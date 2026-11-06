@@ -68,13 +68,13 @@ int main(int argc, char **argv)
 
   // Run test
   bool converged;
-  std::cout << GridLogMessage << "Test_robbins_monro_solver: Comparing with expected values for " <<
+  std::cout << GridLogMessage << "Test_newton_raphson_solver: Comparing with expected values for " <<
     gaugeGroup << ": S0 = " << S0 << ", a = " << a_expected << std::endl;
     
-  typedef LLRSolver<ConstrainedWilsonGaugeAction, &RobbinsMonro> Solver;
+  typedef LLRSolver<ConstrainedWilsonGaugeAction, &NewtonRaphson> Solver;
   ConstrainedActionParameters action_parameters{.a=a0, .S0=S0, .sigma=sigma};
   LLRSolverParameters solver_parameters(n_thermalisation, n_rethermalisation, n_accumulation, 1.0);
-  converged = run_test<Solver>(action_parameters, solver_parameters, "robbins_monro", n_traj, a_expected, epsilon_a);
+  converged = run_test<Solver>(action_parameters, solver_parameters, "newton_raphson", n_traj, a_expected, epsilon_a);
   
   assert(converged);
 
