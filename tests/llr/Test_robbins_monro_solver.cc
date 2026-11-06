@@ -50,7 +50,7 @@ int main(int argc, char **argv)
   Grid_init(&updatedArgc, &updatedArgv);
   GridLogLayout();
 
-  // Starting and expected final values for solver parameters
+  // Starting and expected final values for constrained action and solver parameters
   RealD a0, S0, a_expected, sigma  = 3.0;
   int n_thermalisation = 100, n_rethermalisation = 10, n_accumulation = 5, n_iter = 14;
   int n_traj = n_thermalisation + n_accumulation + (n_iter -1) * (n_accumulation + n_rethermalisation); // 300 for default values
